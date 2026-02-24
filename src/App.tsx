@@ -6,6 +6,10 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import TeamSpace from "./pages/TeamSpace";
+import Tasks from "./pages/Tasks";
+import Review from "./pages/Review";
+import Targets from "./pages/Targets";
+import Reports from "./pages/Reports";
 import ContentCalendar from "./pages/ContentCalendar";
 import AppLayout from "./components/AppLayout";
 import NotFound from "./pages/NotFound";
@@ -23,10 +27,11 @@ const App = () => (
           <Route element={<AppLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/team-space" element={<TeamSpace />} />
+            <Route path="/tasks" element={<Tasks />} />
+            <Route path="/review" element={<Review />} />
+            <Route path="/targets" element={<Targets />} />
+            <Route path="/reports" element={<Reports />} />
             <Route path="/calendar" element={<ContentCalendar />} />
-            <Route path="/review" element={<Dashboard />} />
-            <Route path="/targets" element={<Dashboard />} />
-            <Route path="/reports" element={<Dashboard />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
