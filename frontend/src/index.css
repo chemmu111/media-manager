@@ -131,3 +131,12 @@
     @apply bg-[hsl(var(--status-purple)/0.12)] text-[hsl(var(--status-purple))];
   }
 }
+
+@keyframes wave {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+.animate-wave {
+  animation: wave 2s linear infinite;
+}
