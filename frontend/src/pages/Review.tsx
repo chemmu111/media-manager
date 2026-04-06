@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -464,6 +465,7 @@ function ReviewModal({ item, action, onConfirm, onClose }: ReviewModalProps) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 const Review = () => {
+  const { teamId } = useParams<{ teamId?: string }>();
   const [activeTab, setActiveTab] = useState("All");
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -532,22 +534,11 @@ const Review = () => {
     setDbError(null);
     setUsingMock(false);
     try {
-      const res = await fetch(`${API_BASE}/content`);
+      const res = await fetch(`${API_BASE}/submissions`, { credentials: "include" });
       if (!res.ok) throw new Error(`Server responded with ${res.status}`);
       const data: ReviewItem[] = await res.json();
-      if (data.length === 0) {
-        try {
-          await fetch(`${API_BASE}/content/seed`, { method: "POST" });
-          const seeded = await fetch(`${API_BASE}/content`);
-          if (seeded.ok) {
-            setItems(await seeded.json());
-            return;
-          }
-        } catch {
-          /* ignored */
-        }
-      }
-      setItems(data);
+      setItems(data.length ? data : MOCK_ITEMS);
+      if (!data.length) setUsingMock(true);
     } catch (err: any) {
       const msg =
         err instanceof TypeError
@@ -599,7 +590,7 @@ const Review = () => {
     }
 
     try {
-      const res = await fetch(`${API_BASE}/content/${id}/status`, {
+      const res = await fetch(`${API_BASE}/submissions/${id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),

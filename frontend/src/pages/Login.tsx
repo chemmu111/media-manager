@@ -15,6 +15,7 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [isRegister, setIsRegister] = useState(false);
   const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,6 +24,11 @@ const Login = () => {
     // Client-side validation
     if (!email || !password) {
       setError("Email and password are required");
+      return;
+    }
+
+    if (isRegister && !username.trim()) {
+      setError("Username is required");
       return;
     }
 
@@ -41,7 +47,7 @@ const Login = () => {
     try {
       const endpoint = isRegister ? "/api/auth/register" : "/api/auth/login";
       const body = isRegister
-        ? { email, password, name }
+        ? { email, password, name, username: username.trim() }
         : { email, password };
 
       const res = await fetch(`http://${window.location.hostname}:8080${endpoint}`, {
@@ -61,8 +67,8 @@ const Login = () => {
       // Store user in AuthContext (also writes localStorage)
       setUser(data.user);
 
-      // Role-based redirect — admin lands on Project Board, editor on their dashboard
-      const destination = data.user.role === "admin" ? "/tasks" : "/editor/dashboard";
+      // Role-based redirect — admin lands on overview Dashboard, editor on their dashboard
+      const destination = data.user.role === "admin" ? "/dashboard" : "/editor/dashboard";
       navigate(destination);
     } catch (err) {
       setError(
@@ -126,11 +132,32 @@ const Login = () => {
                 <Label htmlFor="name">Full Name</Label>
                 <Input
                   id="name"
-                  placeholder="Your name"
+                  placeholder="Your full name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="h-11"
                 />
+              </div>
+            )}
+            {isRegister && (
+              <div className="space-y-2">
+                <Label htmlFor="username">Username</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm select-none">
+                    @
+                  </span>
+                  <Input
+                    id="username"
+                    placeholder="yourhandle"
+                    value={username}
+                    onChange={(e) => {
+                      setUsername(e.target.value.toLowerCase().replace(/\s/g, ""));
+                      setError("");
+                    }}
+                    className="h-11 pl-7"
+                    autoComplete="username"
+                  />
+                </div>
               </div>
             )}
             <div className="space-y-2">
@@ -179,6 +206,7 @@ const Login = () => {
               onClick={() => {
                 setIsRegister(!isRegister);
                 setError("");
+                setUsername("");
               }}
               className="text-sm text-primary hover:underline font-medium"
             >

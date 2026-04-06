@@ -658,6 +658,150 @@ function UploadVideoModal({
   );
 }
 
+// ── Quick Upload Modal ────────────────────────────────────────────────────────
+function QuickUploadModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [title, setTitle] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim() || !file) return;
+    setUploading(true);
+    const formData = new FormData();
+    formData.append("title", title.trim());
+    formData.append("file", file);
+    try {
+      const res = await fetch(`${API_BASE}/content/quick-upload`, {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+      let data: Record<string, string> = {};
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(`Server error (${res.status} ${res.statusText})`);
+      }
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      toast.success(`"${title}" uploaded and sent for review!`);
+      onSuccess();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center shadow-sm">
+              <Film className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">New Submission</h2>
+              <p className="text-[11px] text-gray-400">Upload video for admin review</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 rounded-md hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Video Title <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Instagram Reels – Episode 6"
+              className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100 transition-all"
+              disabled={uploading}
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Video File <span className="text-red-500">*</span>
+            </label>
+            <div
+              onClick={() => !uploading && fileRef.current?.click()}
+              className={`border-2 border-dashed rounded-xl p-5 text-center transition-all cursor-pointer ${
+                file ? "border-purple-400 bg-purple-50/50" : "border-gray-200 hover:border-purple-300 bg-gray-50"
+              } ${uploading ? "opacity-60 cursor-not-allowed pointer-events-none" : ""}`}
+            >
+              <input
+                ref={fileRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                disabled={uploading}
+              />
+              {file ? (
+                <div className="space-y-1">
+                  <Film className="w-5 h-5 text-purple-500 mx-auto" />
+                  <p className="text-sm font-semibold text-purple-700 truncate max-w-xs mx-auto">{file.name}</p>
+                  <p className="text-xs text-gray-400">{(file.size / 1024 / 1024).toFixed(1)} MB · click to change</p>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <CloudUpload className="w-6 h-6 text-gray-300 mx-auto" />
+                  <p className="text-sm font-medium text-gray-500">Click to select a video</p>
+                  <p className="text-xs text-gray-400">MP4, MOV, AVI · max 500 MB</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {uploading && (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-purple-50 border border-purple-100">
+              <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-purple-800">Uploading to Cloudinary…</p>
+                <p className="text-xs text-purple-500 mt-0.5">Large files may take a moment</p>
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={uploading}
+              className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!title.trim() || !file || uploading}
+              className="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold shadow-sm hover:from-purple-700 hover:to-violet-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {uploading ? (
+                <><div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Uploading…</>
+              ) : (
+                <><Upload className="w-3.5 h-3.5" />Upload & Submit</>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 const EditorFeedback = () => {
   const [activeTab, setActiveTab] = useState<Tab>("All");
@@ -666,6 +810,7 @@ const EditorFeedback = () => {
   const [loading, setLoading] = useState(true);
   const [dbError, setDbError] = useState<string | null>(null);
   const [uploadTask, setUploadTask] = useState<ReviewItem | null>(null);
+  const [showQuickUpload, setShowQuickUpload] = useState(false);
 
   // Chat drawer
   const [chatTask, setChatTask] = useState<ReviewItem | null>(null);
@@ -705,7 +850,7 @@ const EditorFeedback = () => {
     setLoading(true);
     setDbError(null);
     try {
-      const res = await fetch(`${API_BASE}/content`, { credentials: "include" });
+      const res = await fetch(`${API_BASE}/submissions`, { credentials: "include" });
       if (!res.ok) throw new Error(`${res.status}: ${res.statusText}`);
       const data: ReviewItem[] = await res.json();
       setItems(data.length ? data : MOCK_ITEMS);
@@ -857,6 +1002,14 @@ const EditorFeedback = () => {
   return (
     <div className="p-6 space-y-6 max-w-5xl">
 
+      {/* Quick Upload Modal */}
+      {showQuickUpload && (
+        <QuickUploadModal
+          onClose={() => setShowQuickUpload(false)}
+          onSuccess={() => { setShowQuickUpload(false); fetchItems(); }}
+        />
+      )}
+
       {/* Page header */}
       <div className="flex items-start justify-between">
         <div>
@@ -867,14 +1020,23 @@ const EditorFeedback = () => {
             Track the status of your submitted content and act on admin feedback.
           </p>
         </div>
-        {needsAction > 0 && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200">
-            <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
-            <span className="text-sm font-medium text-red-700">
-              {needsAction} item{needsAction > 1 ? "s" : ""} need attention
-            </span>
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {needsAction > 0 && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200">
+              <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+              <span className="text-sm font-medium text-red-700">
+                {needsAction} item{needsAction > 1 ? "s" : ""} need attention
+              </span>
+            </div>
+          )}
+          <button
+            onClick={() => setShowQuickUpload(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 text-white text-sm font-semibold shadow-sm hover:from-purple-700 hover:to-violet-700 transition-all"
+          >
+            <Upload className="w-4 h-4" />
+            + New Submission
+          </button>
+        </div>
       </div>
 
       {/* DB error banner */}

@@ -22,8 +22,12 @@ import {
   ArrowUpRight,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { io as ioClient, Socket } from "socket.io-client";
 
-const API_CONTENT = `http://${window.location.hostname}:8080/api/content`;
+const SOCKET_URL = `http://${window.location.hostname}:8080`;
+
+const API_BASE    = `http://${window.location.hostname}:8080/api`;
+const API_CONTENT = `${API_BASE}/content`;
 
 interface ContentItem {
   _id: string;
@@ -36,67 +40,7 @@ interface ContentItem {
 
 /* ─── Static / mock data ─────────────────────────────────────────────────── */
 
-type TaskStatus = "In Editing" | "Submitted" | "Feedback" | "Completed" | "Pending";
-
-interface WorkflowTask {
-  id: string;
-  task: string;
-  project: string;
-  assignedTo: { initials: string; color: string; name: string };
-  deadline: string;
-  status: TaskStatus;
-}
-
-const workflowTasks: WorkflowTask[] = [
-  {
-    id: "1",
-    task: "Instagram Reels Tips – Episode 5",
-    project: "Social Reels Q1",
-    assignedTo: { initials: "AJ", color: "bg-blue-500", name: "Alex J." },
-    deadline: "2026-03-17",
-    status: "In Editing",
-  },
-  {
-    id: "2",
-    task: "How to Grow on YouTube 2026",
-    project: "YouTube Strategy",
-    assignedTo: { initials: "SR", color: "bg-violet-500", name: "Sara R." },
-    deadline: "2026-03-18",
-    status: "Submitted",
-  },
-  {
-    id: "3",
-    task: "Behind the Scenes – March Shoot",
-    project: "BTS Content",
-    assignedTo: { initials: "MK", color: "bg-emerald-500", name: "Mike K." },
-    deadline: "2026-03-16",
-    status: "Feedback",
-  },
-  {
-    id: "4",
-    task: "Product Launch Teaser",
-    project: "Brand Launch",
-    assignedTo: { initials: "LA", color: "bg-amber-500", name: "Lara A." },
-    deadline: "2026-03-19",
-    status: "In Editing",
-  },
-  {
-    id: "5",
-    task: "Weekly Vlog – Week 11",
-    project: "Vlog Series",
-    assignedTo: { initials: "AJ", color: "bg-blue-500", name: "Alex J." },
-    deadline: "2026-03-21",
-    status: "Pending",
-  },
-  {
-    id: "6",
-    task: "Brand Story Montage",
-    project: "Brand Launch",
-    assignedTo: { initials: "SR", color: "bg-violet-500", name: "Sara R." },
-    deadline: "2026-03-14",
-    status: "Completed",
-  },
-];
+type TaskStatus = "upcoming" | "unassigned" | "in-progress" | "under-review" | "completed" | "released";
 
 const teamHighlights = [
   { initials: "AJ", color: "bg-blue-500", name: "Alex J.", score: 98, tasks: 14, badge: "⚡ Top Speed" },
@@ -105,12 +49,13 @@ const teamHighlights = [
   { initials: "LA", color: "bg-amber-500", name: "Lara A.", score: 82, tasks: 9, badge: "✨ Creative" },
 ];
 
-const statusConfig: Record<TaskStatus, { className: string; dot: string }> = {
-  "In Editing":  { className: "bg-blue-100 text-blue-700 border border-blue-200",    dot: "bg-blue-500" },
-  Submitted:     { className: "bg-violet-100 text-violet-700 border border-violet-200", dot: "bg-violet-500" },
-  Feedback:      { className: "bg-orange-100 text-orange-700 border border-orange-200", dot: "bg-orange-500" },
-  Completed:     { className: "bg-green-100 text-green-700 border border-green-200",  dot: "bg-green-500" },
-  Pending:       { className: "bg-gray-100 text-gray-600 border border-gray-200",     dot: "bg-gray-400" },
+const statusConfig: Record<string, { label: string, className: string; dot: string }> = {
+  "upcoming":    { label: "Upcoming",    className: "bg-slate-100 text-slate-700 border border-slate-200",     dot: "bg-slate-500" },
+  "unassigned":  { label: "Unassigned",  className: "bg-gray-100 text-gray-600 border border-gray-200",        dot: "bg-gray-400" },
+  "in-progress": { label: "In Progress", className: "bg-blue-100 text-blue-700 border border-blue-200",        dot: "bg-blue-500" },
+  "under-review":{ label: "Under Review",className: "bg-violet-100 text-violet-700 border border-violet-200",  dot: "bg-violet-500" },
+  "completed":   { label: "Completed",   className: "bg-green-100 text-green-700 border border-green-200",     dot: "bg-green-500" },
+  "released":    { label: "Released",    className: "bg-emerald-100 text-emerald-700 border border-emerald-200",dot: "bg-emerald-500" },
 };
 
 function deadlineMeta(dateStr: string): { label: string; color: string } {
@@ -154,8 +99,10 @@ const Dashboard = () => {
   const { user: authUser } = useAuth();
 
   const [pendingItems, setPendingItems] = useState<ContentItem[]>([]);
+  const [dashboardTasks, setDashboardTasks] = useState<any[]>([]);
   const [loadingContent, setLoadingContent] = useState(true);
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "All">("All");
+  const [dbOnline, setDbOnline] = useState<boolean | null>(null);
 
   useEffect(() => {
     fetch(`${API_CONTENT}?status=pending`, { credentials: "include" })
@@ -163,6 +110,31 @@ const Dashboard = () => {
       .then((data) => Array.isArray(data) && setPendingItems(data))
       .catch(() => {})
       .finally(() => setLoadingContent(false));
+
+    fetch(`${API_BASE}/tasks`, { credentials: "include" })
+      .then((r) => r.json())
+      .then((data) => Array.isArray(data) && setDashboardTasks(data))
+      .catch(() => {});
+
+    fetch(`${API_BASE}/status`)
+      .then((r) => setDbOnline(r.ok))
+      .catch(() => setDbOnline(false));
+
+    // Real-time task updates
+    const socket: Socket = ioClient(SOCKET_URL, { withCredentials: true });
+    socket.on("taskUpdated", (updatedTask: any) => {
+      setDashboardTasks((prev) => {
+        const exists = prev.find((t) => t._id === updatedTask._id);
+        if (exists) {
+          return prev.map((t) => (t._id === updatedTask._id ? { ...t, ...updatedTask } : t));
+        }
+        return [...prev, updatedTask];
+      });
+    });
+
+    return () => {
+      socket.disconnect();
+    };
   }, []);
 
   const pendingReview = pendingItems.length;
@@ -170,8 +142,8 @@ const Dashboard = () => {
 
   const filteredTasks =
     statusFilter === "All"
-      ? workflowTasks
-      : workflowTasks.filter((t) => t.status === statusFilter);
+      ? dashboardTasks
+      : dashboardTasks.filter((t) => t.status === statusFilter);
 
   const statCards = [
     {
@@ -231,13 +203,34 @@ const Dashboard = () => {
             Welcome back, {authUser?.name?.split(" ")[0] || "Admin"} — here's your production overview.
           </p>
         </div>
-        <Button
-          className="flex items-center gap-2 bg-gray-900 hover:bg-gray-800 text-white shadow-sm"
-          onClick={() => navigate("/tasks")}
-        >
-          <ArrowUpRight className="w-4 h-4" />
-          New Project
-        </Button>
+        <div className="flex items-center gap-3">
+          {/* DB status badge */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border bg-white shadow-sm">
+            {dbOnline === null ? (
+              <span className="w-2 h-2 rounded-full bg-gray-300 animate-pulse" />
+            ) : dbOnline ? (
+              <>
+                <span className="relative flex w-2 h-2">
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75 animate-ping" />
+                  <span className="relative inline-flex w-2 h-2 rounded-full bg-green-500" />
+                </span>
+                <span className="text-xs font-medium text-green-700">Database Online</span>
+              </>
+            ) : (
+              <>
+                <span className="w-2 h-2 rounded-full bg-red-500" />
+                <span className="text-xs font-medium text-red-600">Database Offline</span>
+              </>
+            )}
+          </div>
+          <Button
+            className="flex items-center gap-2 bg-gray-900 hover:bg-gray-800 text-white shadow-sm"
+            onClick={() => navigate("/tasks")}
+          >
+            <ArrowUpRight className="w-4 h-4" />
+            New Project
+          </Button>
+        </div>
       </div>
 
       {/* ── Top stat cards ─────────────────────────────────────────── */}
@@ -297,9 +290,8 @@ const Dashboard = () => {
             </button>
           </CardHeader>
 
-          {/* Status filter pills */}
-          <div className="px-6 pt-4 pb-2 flex items-center gap-2 flex-wrap">
-            {(["All", "In Editing", "Submitted", "Feedback", "Pending", "Completed"] as const).map((s) => (
+            <div className="px-6 pt-4 pb-2 flex items-center gap-2 flex-wrap">
+            {(["All", "upcoming", "unassigned", "in-progress", "under-review", "completed", "released"] as const).map((s) => (
               <button
                 key={s}
                 onClick={() => setStatusFilter(s as TaskStatus | "All")}
@@ -309,7 +301,7 @@ const Dashboard = () => {
                     : "bg-white text-gray-500 border-gray-200 hover:border-gray-400"
                 }`}
               >
-                {s}
+                {s === "All" ? "All" : statusConfig[s]?.label || s}
               </button>
             ))}
           </div>
@@ -318,7 +310,7 @@ const Dashboard = () => {
             {/* Table header */}
             <div className="grid grid-cols-[2fr_1.5fr_1fr_1fr_1.2fr_auto] gap-3 px-6 py-2.5 bg-gray-50 border-y border-gray-100 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
               <span>Task</span>
-              <span>Project</span>
+              <span>Project / Team</span>
               <span>Assigned To</span>
               <span>Deadline</span>
               <span>Status</span>
@@ -332,29 +324,51 @@ const Dashboard = () => {
                 </div>
               )}
               {filteredTasks.map((task) => {
-                const dl   = deadlineMeta(task.deadline);
-                const sc   = statusConfig[task.status];
+                const dl   = deadlineMeta(task.endDate || task.createdAt);
+                const sc   = statusConfig[task.status] || statusConfig["unassigned"];
+                
+                // Safety extract assignees
+                const assignName = typeof task.assignedTo === 'object' && task.assignedTo ? task.assignedTo.name : task.assignee || 'Unassigned';
+                const initialStr = assignName.substring(0,2).toUpperCase();
+                
+                // Color gen
+                const colors = ["bg-blue-500", "bg-violet-500", "bg-emerald-500", "bg-amber-500", "bg-rose-500"];
+                const colorHash = assignName.length % colors.length;
+                const avatarBg = colors[colorHash];
+
+                const projectName = typeof task.teamSpaceId === 'object' && task.teamSpaceId ? task.teamSpaceId.name : typeof task.teamId === 'object' && task.teamId ? task.teamId.name : 'General';
+
                 return (
                   <div
-                    key={task.id}
+                    key={task._id}
                     className="grid grid-cols-[2fr_1.5fr_1fr_1fr_1.2fr_auto] gap-3 items-center px-6 py-3.5 hover:bg-gray-50/70 transition-colors group"
                   >
                     {/* Task name */}
-                    <p className="text-sm font-medium text-gray-800 truncate">{task.task}</p>
+                    <div className="flex flex-col truncate">
+                        <p className="text-sm font-medium text-gray-800 truncate">{task.title}</p>
+                        {task.createdBy && typeof task.createdBy === 'object' && (
+                            <p className="text-[9px] text-gray-400 mt-0.5 truncate flex items-center gap-1">
+                                {task.createdBy.role === 'admin' 
+                                  ? <span className="font-semibold text-violet-600 bg-violet-50 px-1.5 py-0.5 rounded-sm">Assigned by Admin</span> 
+                                  : <>By <span className="font-semibold">{task.createdBy.name}</span></>
+                                }
+                            </p>
+                        )}
+                    </div>
 
                     {/* Project */}
-                    <p className="text-xs text-gray-500 truncate">{task.project}</p>
+                    <p className="text-xs text-gray-500 truncate">{projectName}</p>
 
                     {/* Avatar */}
                     <div className="flex items-center gap-2">
                       <div
-                        className={`w-7 h-7 rounded-full ${task.assignedTo.color} flex items-center justify-center text-[10px] font-bold text-white shrink-0`}
-                        title={task.assignedTo.name}
+                        className={`w-7 h-7 rounded-full ${avatarBg} flex items-center justify-center text-[10px] font-bold text-white shrink-0`}
+                        title={assignName}
                       >
-                        {task.assignedTo.initials}
+                        {initialStr}
                       </div>
                       <span className="text-xs text-gray-600 hidden lg:inline truncate">
-                        {task.assignedTo.name}
+                        {assignName}
                       </span>
                     </div>
 
@@ -364,7 +378,7 @@ const Dashboard = () => {
                     {/* Status badge */}
                     <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full w-fit ${sc.className}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />
-                      {task.status}
+                      {sc.label}
                     </span>
 
                     {/* Actions */}

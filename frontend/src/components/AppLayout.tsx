@@ -14,7 +14,9 @@ import {
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
+import { io as ioClient, Socket } from "socket.io-client";
 
+const SOCKET_URL = `http://${window.location.hostname}:8080`;
 const API_BASE = `http://${window.location.hostname}:8080/api`;
 
 const AppLayout = () => {
@@ -38,7 +40,17 @@ const AppLayout = () => {
     fetchProfile();
     fetchNotifications();
     const interval = setInterval(fetchNotifications, 30000);
-    return () => clearInterval(interval);
+
+    const socket: Socket = ioClient(SOCKET_URL, { withCredentials: true });
+    socket.on("newNotification", (notification: any) => {
+      setNotifications((prev) => [notification, ...prev]);
+      setUnreadCount((prev) => prev + 1);
+    });
+
+    return () => {
+      clearInterval(interval);
+      socket.disconnect();
+    };
   }, []);
 
   const fetchProfile = async () => {

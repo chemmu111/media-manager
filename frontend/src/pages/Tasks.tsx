@@ -1,4 +1,8 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useParams } from "react-router-dom";
+import { io as ioClient, Socket } from "socket.io-client";
+
+const SOCKET_URL = `http://${window.location.hostname}:8080`;
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,6 +32,8 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/context/AuthContext";
+import { useTeams } from "@/context/TeamContext";
 import TaskModal, { ModalTask } from "@/components/TaskModal";
 import TaskChat from "@/components/TaskChat";
 import {
@@ -39,6 +45,7 @@ import {
   useSensors,
   DragOverlay,
   defaultDropAnimationSideEffects,
+  useDroppable,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -51,11 +58,11 @@ import { CSS } from "@dnd-kit/utilities";
 const API = `http://${window.location.hostname}:8080/api/tasks`;
 
 type TaskStatus =
-  | "upcoming_event"
+  | "upcoming"
   | "unassigned"
-  | "in_progress"
+  | "in-progress"
   | "completed"
-  | "under_review"
+  | "under-review"
   | "released"
   | "rejected"
   | "idea_approved"
@@ -66,16 +73,23 @@ type TaskStatus =
 type Platform = "youtube" | "instagram" | "facebook" | "linkedin" | "other";
 type TaskType = "task" | "event";
 
+interface AssignedEditor {
+  _id:  string;
+  name: string;
+  role: string;
+}
+
 interface Task {
-  _id: string;
-  title: string;
+  _id:        string;
+  title:      string;
   description?: string;
-  status: TaskStatus;
-  priority: "high" | "medium" | "low";
-  assignee?: string;
-  endDate?: string;
-  platform?: Platform;
-  type?: TaskType;
+  status:     TaskStatus;
+  priority:   "high" | "medium" | "low";
+  assignee?:  string;                           // legacy plain-string name
+  assignedTo?: AssignedEditor | string | null;  // populated ObjectId
+  endDate?:   string;
+  platform?:  Platform;
+  type?:      TaskType;
 }
 
 /* ─── Column definitions ───────────────────────────────────────────────────── */
@@ -87,7 +101,7 @@ const columns: {
   badgeClass: string;
 }[] = [
   {
-    id: "upcoming_event",
+    id: "upcoming",
     label: "Upcoming",
     dot: "bg-slate-500",
     headerBg: "border-t-slate-500",
@@ -101,7 +115,7 @@ const columns: {
     badgeClass: "bg-gray-100 text-gray-600 border-gray-200",
   },
   {
-    id: "in_progress",
+    id: "in-progress",
     label: "In Progress",
     dot: "bg-blue-500",
     headerBg: "border-t-blue-500",
@@ -115,7 +129,7 @@ const columns: {
     badgeClass: "bg-green-100 text-green-700 border-green-200",
   },
   {
-    id: "under_review",
+    id: "under-review",
     label: "Under Review",
     dot: "bg-amber-500",
     headerBg: "border-t-amber-500",
@@ -141,7 +155,7 @@ const tableStatusConfig: Record<
   TaskStatus,
   { label: string; className: string; dot: string }
 > = {
-  upcoming_event: {
+  upcoming: {
     label: "Upcoming",
     className: "bg-slate-100 text-slate-700 border border-slate-200",
     dot: "bg-slate-500",
@@ -151,7 +165,7 @@ const tableStatusConfig: Record<
     className: "bg-gray-100 text-gray-600 border border-gray-200",
     dot: "bg-gray-400",
   },
-  in_progress: {
+  "in-progress": {
     label: "In Editing",
     className: "bg-blue-100 text-blue-700 border border-blue-200",
     dot: "bg-blue-500",
@@ -161,7 +175,7 @@ const tableStatusConfig: Record<
     className: "bg-green-100 text-green-700 border border-green-200",
     dot: "bg-green-500",
   },
-  under_review: {
+  "under-review": {
     label: "Submitted",
     className: "bg-violet-100 text-violet-700 border border-violet-200",
     dot: "bg-violet-500",
@@ -328,8 +342,9 @@ const avatarColors = [
   "bg-cyan-500",
 ];
 function avatarColor(name: string) {
+  const safeName = (name || "User").trim() || "User";
   let hash = 0;
-  for (const c of name) hash = c.charCodeAt(0) + ((hash << 5) - hash);
+  for (const c of safeName) hash = c.charCodeAt(0) + ((hash << 5) - hash);
   return avatarColors[Math.abs(hash) % avatarColors.length];
 }
 
@@ -350,25 +365,37 @@ const TaskCardInner = ({
   onClick,
   onChat,
   dragging = false,
+  highlighted = false,
 }: {
   task: Task;
   col: (typeof columns)[0];
   onClick?: (e: React.MouseEvent) => void;
   onChat?: (e: React.MouseEvent) => void;
   dragging?: boolean;
+  highlighted?: boolean;
 }) => {
   const PlatformIcon = platformIcons[task.platform || "other"];
   const pb = priorityBadge[task.priority] ?? priorityBadge.low;
   const dl = deadlineMeta(task.endDate);
+
+  // Resolve editor name from populated assignedTo object or legacy assignee string
+  const editorName =
+    typeof task.assignedTo === "object" && task.assignedTo
+      ? (task.assignedTo as AssignedEditor).name
+      : task.assignee || null;
+
+  const isActive = task.status === "in-progress";
 
   return (
     <div
       onClick={onClick}
       className={cn(
         "bg-white rounded-xl border shadow-sm select-none overflow-hidden group/card",
-        "transition-all duration-150",
+        "transition-all duration-300",
         dragging
           ? "shadow-2xl border-blue-300 rotate-2 scale-105"
+          : highlighted
+          ? "border-blue-400 ring-2 ring-blue-400/40 ring-offset-1 shadow-lg shadow-blue-100 scale-[1.01] cursor-grab"
           : "border-gray-100 hover:border-gray-200 hover:shadow-md hover:-translate-y-0.5 cursor-grab active:cursor-grabbing"
       )}
     >
@@ -394,25 +421,48 @@ const TaskCardInner = ({
           {task.title}
         </p>
 
-        {/* Row 3: avatar + due date + chat */}
+        {/* Editor assignment badge + in-progress pulse */}
+        {(editorName || isActive) && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {editorName && (
+              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-100 max-w-[120px]">
+                <div
+                  className={cn(
+                    "w-3.5 h-3.5 rounded-full flex items-center justify-center text-white text-[8px] font-bold shrink-0",
+                    avatarColor(editorName)
+                  )}
+                >
+                  {editorName.charAt(0).toUpperCase()}
+                </div>
+                <span className="text-[10px] text-indigo-700 font-semibold truncate leading-none">
+                  {editorName.split(" ")[0]}
+                </span>
+              </div>
+            )}
+
+            {isActive && (
+              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-blue-50 border border-blue-100">
+                {/* Pulse dot */}
+                <span className="relative flex h-1.5 w-1.5 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-blue-500" />
+                </span>
+                <span className="text-[9px] font-bold text-blue-600 uppercase tracking-wide leading-none">
+                  Active
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Bottom row: due date + chat */}
         <div className="flex items-center justify-between pt-1.5 border-t border-gray-50">
-          {task.assignee ? (
-            <div
-              title={task.assignee}
-              className={cn(
-                "w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-white ring-2 ring-white",
-                avatarColor(task.assignee)
-              )}
-            >
-              <span className="text-[9px] font-extrabold">
-                {task.assignee.charAt(0).toUpperCase()}
-              </span>
-            </div>
-          ) : (
-            <div className="w-6 h-6 rounded-full bg-gray-100 border border-dashed border-gray-300 shrink-0" />
+          {/* Unassigned ghost avatar (only when no editor name to show in badge above) */}
+          {!editorName && (
+            <div className="w-5 h-5 rounded-full bg-gray-100 border border-dashed border-gray-300 shrink-0" />
           )}
 
-          <div className="flex items-center gap-1.5">
+          <div className={cn("flex items-center gap-1.5", editorName && "ml-auto")}>
             {task.endDate ? (
               <div className={cn("flex items-center gap-1 shrink-0 text-[10px] font-medium", dl.color)}>
                 <Calendar className="w-3 h-3" />
@@ -445,11 +495,13 @@ const SortableTaskCard = ({
   col,
   onClick,
   onChat,
+  highlighted = false,
 }: {
   task: Task;
   col: (typeof columns)[0];
   onClick: (e: React.MouseEvent) => void;
   onChat: (e: React.MouseEvent) => void;
+  highlighted?: boolean;
 }) => {
   const {
     attributes,
@@ -463,17 +515,16 @@ const SortableTaskCard = ({
   const style = {
     transform: CSS.Translate.toString(transform),
     transition: transition ?? "transform 200ms ease",
-    opacity: isDragging ? 0 : 1,         // hide original while DragOverlay shows it
+    opacity: isDragging ? 0 : 1,
     pointerEvents: isDragging ? "none" as const : undefined,
   };
 
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
       {isDragging ? (
-        /* Ghost placeholder while dragging */
         <div className="rounded-xl border-2 border-dashed border-blue-300 bg-blue-50/60 h-[88px]" />
       ) : (
-        <TaskCardInner task={task} col={col} onClick={onClick} onChat={onChat} />
+        <TaskCardInner task={task} col={col} onClick={onClick} onChat={onChat} highlighted={highlighted} />
       )}
     </div>
   );
@@ -483,6 +534,12 @@ const SortableTaskCard = ({
    MAIN COMPONENT
 ══════════════════════════════════════════════════════════════════════════════ */
 const Tasks = () => {
+  const { teamId: teamIdParam } = useParams<{ teamId?: string }>();
+  const { activeTeamId }        = useTeams();
+  const { isAdmin }             = useAuth();
+
+  // URL param wins; fall back to the globally selected team from the sidebar
+  const teamId = teamIdParam ?? activeTeamId ?? undefined;
   const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
 
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -495,20 +552,46 @@ const Tasks = () => {
   const [chatTask,    setChatTask]    = useState<Task | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "All">("All");
+  const [recentlyUpdated, setRecentlyUpdated] = useState<string | null>(null);
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
+  // ── Real-time task updates via Socket.io ──────────────────────────────────
   useEffect(() => {
-    loadTasks();
+    const socket: Socket = ioClient(SOCKET_URL, { withCredentials: true });
+
+    socket.on("taskUpdated", (updatedTask: Task) => {
+      setTasks((prev) =>
+        prev.map((t) => (t._id === updatedTask._id ? { ...t, ...updatedTask } : t))
+      );
+
+      // Highlight the updated card briefly, then clear
+      if (highlightTimer.current) clearTimeout(highlightTimer.current);
+      setRecentlyUpdated(updatedTask._id);
+      highlightTimer.current = setTimeout(() => setRecentlyUpdated(null), 2000);
+    });
+
+    return () => {
+      socket.disconnect();
+      if (highlightTimer.current) clearTimeout(highlightTimer.current);
+    };
   }, []);
 
-  const loadTasks = async () => {
+  useEffect(() => {
+    setTasks([]);   // ← clear stale tasks immediately so spinner shows
+    loadTasks();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamId, activeTeamId]);
+
+  const loadTasks = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(API, { credentials: "include" });
+      const url = teamId ? `${API}?teamId=${teamId}` : API;
+      const res = await fetch(url, { credentials: "include" });
       const data = await res.json();
       if (Array.isArray(data)) setTasks(data);
     } catch (err) {
@@ -516,7 +599,7 @@ const Tasks = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [teamId]);
 
   const openCreate = (status: TaskStatus = "unassigned") => {
     setModalMode("create");
@@ -589,8 +672,8 @@ const Tasks = () => {
   );
 
   /* ── Derived counts ── */
-  const inProgress  = tasks.filter((t) => t.status === "in_progress").length;
-  const underReview = tasks.filter((t) => t.status === "under_review").length;
+  const inProgress  = tasks.filter((t) => t.status === "in-progress").length;
+  const underReview = tasks.filter((t) => t.status === "under-review").length;
   const completed   = tasks.filter((t) => t.status === "completed" || t.status === "released").length;
   const todayTasks  = tasks.filter((t) => {
     if (!t.endDate) return false;
@@ -606,7 +689,7 @@ const Tasks = () => {
       : tasks.filter((t) => t.status === statusFilter);
 
   /* ── Derived data for stat cards ── */
-  const reviewTasks = tasks.filter((t) => t.status === "under_review").slice(0, 2);
+  const reviewTasks = tasks.filter((t) => t.status === "under-review").slice(0, 2);
   const totalTasks  = tasks.length;
   const inProgressPct = totalTasks > 0 ? Math.round((inProgress / totalTasks) * 100) : 0;
   const completedPct  = totalTasks > 0 ? Math.round((completed  / totalTasks) * 100) : 0;
@@ -838,6 +921,7 @@ const Tasks = () => {
                           key={task._id}
                           task={task}
                           col={col}
+                          highlighted={recentlyUpdated === task._id}
                           onClick={(e) => openEdit(task, e)}
                           onChat={(e) => { e.stopPropagation(); setChatTask(task); }}
                         />
@@ -1131,6 +1215,8 @@ const Tasks = () => {
           mode={modalMode}
           initialStatus={modalInitialStatus as any}
           task={editingTask ? (editingTask as unknown as ModalTask) : undefined}
+          teamId={teamId}
+          isAdmin={isAdmin}
           onClose={() => setModalOpen(false)}
           onSaved={handleSaved}
         />

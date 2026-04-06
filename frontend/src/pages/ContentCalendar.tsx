@@ -230,10 +230,10 @@ const ContentCalendar = () => {
                   value={editingEvent?.type}
                   onValueChange={(val: any) => setEditingEvent({ ...editingEvent, type: val })}
                 >
-                  <SelectTrigger className="rounded-xl border-gray-200 h-11">
+                  <SelectTrigger className="rounded-xl border-gray-200 h-11 bg-white text-black dark:bg-gray-900 dark:text-white dark:border-gray-700">
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
-                  <SelectContent className="rounded-xl border-none shadow-xl ring-1 ring-black/5">
+                  <SelectContent className="rounded-xl shadow-xl ring-1 ring-black/5 bg-white text-black dark:bg-gray-900 dark:text-white dark:border-gray-700">
                     <SelectItem value="content" className="rounded-lg">Content (Blue)</SelectItem>
                     <SelectItem value="event" className="rounded-lg">Event (Orange)</SelectItem>
                     <SelectItem value="holiday" className="rounded-lg">Holiday (Purple)</SelectItem>
