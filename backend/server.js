@@ -26,6 +26,8 @@ const io = new SocketServer(httpServer, {
         origin: function (origin, callback) {
             if (!origin) return callback(null, true);
             if (origin.match(/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/)) return callback(null, true);
+            const allowed = [process.env.FRONTEND_URL].filter(Boolean);
+            if (allowed.includes(origin)) return callback(null, true);
             callback(new Error(`CORS blocked: ${origin}`));
         },
         credentials: true,

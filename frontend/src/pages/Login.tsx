@@ -71,10 +71,7 @@ const Login = () => {
       const destination = data.user.role === "admin" ? "/dashboard" : "/editor/dashboard";
       navigate(destination);
     } catch (err) {
-      setError(
-        "Cannot connect to server. Make sure the backend is running on port 8080.\n" +
-        "Run: cd backend && npm run dev"
-      );
+      setError("Cannot connect to server. Please try again later.");
     } finally {
       setLoading(false);
     }
