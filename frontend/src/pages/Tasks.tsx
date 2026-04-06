@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { io as ioClient, Socket } from "socket.io-client";
 
-const SOCKET_URL = `http://${window.location.hostname}:8080`;
+const SOCKET_URL = import.meta.env.VITE_API_BASE_URL.replace("/api", "");
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -55,7 +55,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-const API = `http://${window.location.hostname}:8080/api/tasks`;
+const API = `${import.meta.env.VITE_API_BASE_URL}/tasks`;
 
 type TaskStatus =
   | "upcoming"

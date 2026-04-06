@@ -3,8 +3,8 @@ import { X, Flag, User, Calendar, AlignLeft, Tag, Loader2, ChevronDown, Check } 
 import { cn } from "@/lib/utils";
 import { useTeams } from "@/context/TeamContext";
 
-const API       = `http://${window.location.hostname}:8080/api/tasks`;
-const USERS_API = `http://${window.location.hostname}:8080/api/users`;
+const API       = `${import.meta.env.VITE_API_BASE_URL}/tasks`;
+const USERS_API = `${import.meta.env.VITE_API_BASE_URL}/users`;
 
 type TaskStatus = "upcoming" | "unassigned" | "in-progress" | "under-review" | "completed" | "released";
 type Priority   = "high" | "medium" | "low";

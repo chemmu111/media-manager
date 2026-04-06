@@ -24,9 +24,9 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { io as ioClient, Socket } from "socket.io-client";
 
-const SOCKET_URL = `http://${window.location.hostname}:8080`;
+const SOCKET_URL = import.meta.env.VITE_API_BASE_URL.replace("/api", "");
 
-const API_BASE    = `http://${window.location.hostname}:8080/api`;
+const API_BASE    = import.meta.env.VITE_API_BASE_URL;
 const API_CONTENT = `${API_BASE}/content`;
 
 interface ContentItem {

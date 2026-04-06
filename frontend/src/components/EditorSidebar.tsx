@@ -11,7 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-const API_BASE = `http://${window.location.hostname}:8080/api`;
+const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 // ── Sectioned nav structure ───────────────────────────────────────────────────
 const navSections = [

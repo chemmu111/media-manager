@@ -24,7 +24,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-const API_BASE = `http://${window.location.hostname}:8080/api`;
+const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type ContentStatus = "pending" | "approved" | "rejected" | "revision";

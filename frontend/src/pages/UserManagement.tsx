@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Search, RefreshCw, Users, ShieldCheck, Pencil, UserCircle } from "lucide-react";
 
-const API_USERS = `http://${window.location.hostname}:8080/api/users`;
+const API_USERS = `${import.meta.env.VITE_API_BASE_URL}/users`;
 
 interface User {
   _id:      string;

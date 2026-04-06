@@ -32,7 +32,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 
-const API_BASE = `http://${window.location.hostname}:8080/api`;
+const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type StatusKey = "approved" | "pending" | "rejected" | "revision";

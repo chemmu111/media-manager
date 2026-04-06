@@ -20,7 +20,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useTeams } from "@/context/TeamContext";
 import { toast } from "sonner";
 
-const API_BASE = `http://${window.location.hostname}:8080/api`;
+const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 // ── Sub-menu items inside each Team Space ─────────────────────────────────────
 const TEAM_NAV_ITEMS = [

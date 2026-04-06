@@ -4,8 +4,8 @@ import { Send, X, MessageSquare, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 
-const SOCKET_URL = `http://${window.location.hostname}:8080`;
-const API_BASE   = `http://${window.location.hostname}:8080/api`;
+const SOCKET_URL = import.meta.env.VITE_API_BASE_URL.replace("/api", "");
+const API_BASE   = import.meta.env.VITE_API_BASE_URL;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Message {

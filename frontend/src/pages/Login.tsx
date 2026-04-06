@@ -50,7 +50,7 @@ const Login = () => {
         ? { email, password, name, username: username.trim() }
         : { email, password };
 
-      const res = await fetch(`http://${window.location.hostname}:8080${endpoint}`, {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}${endpoint.replace("/api", "")}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
