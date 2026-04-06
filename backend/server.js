@@ -26,6 +26,7 @@ const io = new SocketServer(httpServer, {
         origin: function (origin, callback) {
             if (!origin) return callback(null, true);
             if (origin.match(/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/)) return callback(null, true);
+            if (origin.match(/\.vercel\.app$/)) return callback(null, true);
             const allowed = [process.env.FRONTEND_URL].filter(Boolean);
             if (allowed.includes(origin)) return callback(null, true);
             callback(new Error(`CORS blocked: ${origin}`));
@@ -153,6 +154,10 @@ app.use(cors({
         if (!origin) return callback(null, true);
         // Allow any localhost port during development
         if (origin.match(/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/)) {
+            return callback(null, true);
+        }
+        // Allow all Vercel preview deployments
+        if (origin.match(/\.vercel\.app$/)) {
             return callback(null, true);
         }
         if (allowedOrigins.includes(origin)) {
