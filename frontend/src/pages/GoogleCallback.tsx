@@ -17,7 +17,12 @@ const GoogleCallback = () => {
       return;
     }
 
-    // Cookie is already set by backend — fetch the user profile
+    const token = params.get("token");
+    if (token) {
+      localStorage.setItem("token", token);
+    }
+
+    // Now token is in localStorage, so fetchInterceptor will attach it
     fetch(`${API_BASE}/auth/me`, { credentials: "include" })
       .then((res) => res.json())
       .then((data) => {

@@ -110,8 +110,9 @@ export default function TaskChat({ taskId, taskTitle, onClose }: Props) {
     console.log("[TaskChat] Attempting to connect to:", SOCKET_URL);
     console.log("[TaskChat] Attempting to join room:", taskId);
 
-    // Create socket — withCredentials sends the httpOnly JWT cookie
+    // Create socket — pass the JWT token explicitly via auth
     const socket = io(SOCKET_URL, {
+      auth: { token: localStorage.getItem("token") },
       withCredentials: true,
       transports: ["websocket", "polling"],
       reconnectionAttempts: 5,

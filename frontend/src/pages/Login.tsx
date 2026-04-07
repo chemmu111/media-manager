@@ -75,6 +75,11 @@ const Login = () => {
         return;
       }
 
+      // Store token globally for the fetch interceptor
+      if (data.token) {
+        localStorage.setItem("token", data.token);
+      }
+
       // Store user in AuthContext (also writes localStorage)
       setUser(data.user);
 

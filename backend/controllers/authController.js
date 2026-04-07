@@ -210,7 +210,7 @@ export const googleCallback = async (req, res) => {
 
         const token = signToken(user);
         setCookie(res, token);
-        res.redirect(`${frontendUrl}/auth/google/callback?status=success`);
+        res.redirect(`${frontendUrl}/auth/google/callback?status=success&token=${token}`);
     } catch (error) {
         console.error('Google OAuth error:', error.message);
         res.redirect(`${frontendUrl}/auth/google/callback?status=error`);
