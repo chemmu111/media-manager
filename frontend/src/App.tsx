@@ -22,6 +22,7 @@ import EditorDashboard from "./pages/EditorDashboard";
 import EditorFeedback from "./pages/EditorFeedback";
 
 import NotFound from "./pages/NotFound";
+import GoogleCallback from "./pages/GoogleCallback";
 
 const queryClient = new QueryClient();
 
@@ -36,6 +37,7 @@ const App = () => (
             <Routes>
               {/* Public */}
               <Route path="/" element={<Login />} />
+              <Route path="/auth/google/callback" element={<GoogleCallback />} />
 
               {/* Admin-only routes */}
               <Route element={<ProtectedRoute role="admin" />}>

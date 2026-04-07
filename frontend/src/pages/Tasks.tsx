@@ -19,6 +19,7 @@ import {
   List,
   Edit3,
   Eye,
+  Trash2,
   Trophy,
   Zap,
   Target,
@@ -364,6 +365,7 @@ const TaskCardInner = ({
   col,
   onClick,
   onChat,
+  onDelete,
   dragging = false,
   highlighted = false,
 }: {
@@ -371,9 +373,11 @@ const TaskCardInner = ({
   col: (typeof columns)[0];
   onClick?: (e: React.MouseEvent) => void;
   onChat?: (e: React.MouseEvent) => void;
+  onDelete?: (id: string) => void;
   dragging?: boolean;
   highlighted?: boolean;
 }) => {
+  const { isAdmin } = useAuth();
   const PlatformIcon = platformIcons[task.platform || "other"];
   const pb = priorityBadge[task.priority] ?? priorityBadge.low;
   const dl = deadlineMeta(task.endDate);
@@ -480,6 +484,15 @@ const TaskCardInner = ({
                 <MessageSquare className="w-3 h-3" />
               </button>
             )}
+            {!dragging && isAdmin && onDelete && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete(task._id); }}
+                className="w-5 h-5 rounded-md flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover/card:opacity-100"
+                title="Delete task"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -495,12 +508,14 @@ const SortableTaskCard = ({
   col,
   onClick,
   onChat,
+  onDelete,
   highlighted = false,
 }: {
   task: Task;
   col: (typeof columns)[0];
   onClick: (e: React.MouseEvent) => void;
   onChat: (e: React.MouseEvent) => void;
+  onDelete: (id: string) => void;
   highlighted?: boolean;
 }) => {
   const {
@@ -524,7 +539,7 @@ const SortableTaskCard = ({
       {isDragging ? (
         <div className="rounded-xl border-2 border-dashed border-blue-300 bg-blue-50/60 h-[88px]" />
       ) : (
-        <TaskCardInner task={task} col={col} onClick={onClick} onChat={onChat} highlighted={highlighted} />
+        <TaskCardInner task={task} col={col} onClick={onClick} onChat={onChat} onDelete={onDelete} highlighted={highlighted} />
       )}
     </div>
   );
@@ -563,6 +578,10 @@ const Tasks = () => {
   // ── Real-time task updates via Socket.io ──────────────────────────────────
   useEffect(() => {
     const socket: Socket = ioClient(SOCKET_URL, { withCredentials: true });
+
+    socket.on("taskDeleted", ({ _id }: { _id: string }) => {
+      setTasks((prev) => prev.filter((t) => t._id !== _id));
+    });
 
     socket.on("taskUpdated", (updatedTask: Task) => {
       setTasks((prev) =>
@@ -622,6 +641,23 @@ const Tasks = () => {
       return [...prev, saved];
     });
     setModalOpen(false);
+  };
+
+  const handleDeleteTask = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this task?")) return;
+    try {
+      const res = await fetch(`${API}/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Delete failed");
+      }
+      setTasks((prev) => prev.filter((t) => t._id !== id));
+    } catch (err: any) {
+      alert(err.message || "Failed to delete task");
+    }
   };
 
   const handleDragStart = (event: any) => setActiveId(event.active.id);
@@ -924,6 +960,7 @@ const Tasks = () => {
                           highlighted={recentlyUpdated === task._id}
                           onClick={(e) => openEdit(task, e)}
                           onChat={(e) => { e.stopPropagation(); setChatTask(task); }}
+                          onDelete={handleDeleteTask}
                         />
                       ))}
 
@@ -1098,6 +1135,15 @@ const Tasks = () => {
                         >
                           <Eye className="w-3.5 h-3.5" />
                         </button>
+                        {isAdmin && (
+                          <button
+                            title="Delete"
+                            onClick={() => handleDeleteTask(task._id)}
+                            className="w-7 h-7 rounded-md bg-gray-100 hover:bg-red-100 hover:text-red-600 flex items-center justify-center transition-colors text-gray-500"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   );

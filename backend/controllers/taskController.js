@@ -254,12 +254,23 @@ export const toggleTask = async (req, res) => {
     }
 };
 
-// Delete a task
+// Delete a task — admin only
 export const deleteTask = async (req, res) => {
+    if (req.userRole !== 'admin') {
+        return res.status(403).json({ error: 'Only admins can delete tasks' });
+    }
+
     const { id } = req.params;
     try {
+        const task = await Task.findById(id);
+        if (!task) return res.status(404).json({ error: 'Task not found' });
+
         await Task.findByIdAndDelete(id);
-        res.json({ message: 'Task deleted' });
+
+        // Broadcast real-time deletion to all connected clients
+        req.app.get('io')?.emit('taskDeleted', { _id: id });
+
+        res.json({ message: 'Task deleted successfully' });
     } catch (error) {
         console.error('Delete task error:', error.message);
         res.status(500).json({ error: 'Failed to delete task' });

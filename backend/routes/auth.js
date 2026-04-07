@@ -1,5 +1,5 @@
 import express from 'express';
-import { register, login, getProfile, updatePreferredView, logout, updateAttendance, getAttendance } from '../controllers/authController.js';
+import { register, login, getProfile, updatePreferredView, logout, updateAttendance, getAttendance, googleAuth, googleCallback } from '../controllers/authController.js';
 import { auth } from '../middleware/auth.js';
 import { requireDB } from '../middleware/dbCheck.js';
 
@@ -12,5 +12,7 @@ router.patch('/preferred-view', auth, updatePreferredView);
 router.patch('/attendance', auth, updateAttendance);
 router.get('/attendance', auth, getAttendance);
 router.post('/logout', logout);
+router.get('/google', googleAuth);
+router.get('/google/callback', googleCallback);
 
 export { router as authRouter };

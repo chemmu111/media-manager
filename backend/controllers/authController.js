@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import axios from 'axios';
 import User from '../models/User.js';
 
 const signToken = (user) =>
@@ -73,6 +74,7 @@ export const login = async (req, res) => {
         const user = await User.findOne({ email: email.toLowerCase() });
         if (!user) return res.status(401).json({ error: 'Invalid email or password' });
 
+        if (!user.password) return res.status(401).json({ error: 'This account uses Google sign-in. Please continue with Google.' });
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(401).json({ error: 'Invalid email or password' });
 
@@ -144,6 +146,74 @@ export const getAttendance = async (req, res) => {
     } catch (error) {
         console.error('Get attendance error:', error.message);
         res.status(500).json({ error: 'Server error' });
+    }
+};
+
+export const googleAuth = (req, res) => {
+    const params = new URLSearchParams({
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        redirect_uri: process.env.GOOGLE_REDIRECT_URI,
+        response_type: 'code',
+        scope: 'openid email profile',
+        access_type: 'offline',
+        prompt: 'select_account',
+    });
+    res.json({ authUrl: `https://accounts.google.com/o/oauth2/v2/auth?${params}` });
+};
+
+export const googleCallback = async (req, res) => {
+    const { code } = req.query;
+    const frontendUrl = process.env.FRONTEND_URL;
+
+    try {
+        // Exchange code for tokens
+        const { data: tokens } = await axios.post('https://oauth2.googleapis.com/token', {
+            code,
+            client_id: process.env.GOOGLE_CLIENT_ID,
+            client_secret: process.env.GOOGLE_CLIENT_SECRET,
+            redirect_uri: process.env.GOOGLE_REDIRECT_URI,
+            grant_type: 'authorization_code',
+        });
+
+        // Get user info from Google
+        const { data: profile } = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
+            headers: { Authorization: `Bearer ${tokens.access_token}` },
+        });
+
+        const { sub: googleId, email, name } = profile;
+
+        // Find existing user by googleId or email
+        let user = await User.findOne({ $or: [{ googleId }, { email: email.toLowerCase() }] });
+
+        if (!user) {
+            // Generate a unique username from the email prefix
+            const base = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+            const suffix = Date.now().toString().slice(-4);
+            user = new User({
+                name: name || base,
+                username: `${base}_${suffix}`,
+                email: email.toLowerCase(),
+                googleId,
+                role: 'editor',
+            });
+            await user.save();
+        } else if (!user.googleId) {
+            user.googleId = googleId;
+            await user.save();
+        }
+
+        // Force admin role for the designated admin email
+        if (user.email === 'admin@gmail.com' && user.role !== 'admin') {
+            user.role = 'admin';
+            await user.save();
+        }
+
+        const token = signToken(user);
+        setCookie(res, token);
+        res.redirect(`${frontendUrl}/auth/google/callback?status=success`);
+    } catch (error) {
+        console.error('Google OAuth error:', error.message);
+        res.redirect(`${frontendUrl}/auth/google/callback?status=error`);
     }
 };
 
